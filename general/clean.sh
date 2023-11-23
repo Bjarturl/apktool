@@ -5,5 +5,5 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
-find . -type f -not -name "$APK_FILE_NAME" -exec rm -f {} +
-find . -not \( -name "$APK_FILE_NAME" -o -path "$(pwd)/$APK_FILE_NAME" \) -delete
+echo -e "Cleaning $(pwd)...\n"
+find . -mindepth 1 -not \( -name "$APK_FILE_NAME" -o -path "$(pwd)/$APK_FILE_NAME" \) -exec rm -rf {} +

@@ -73,7 +73,6 @@ generate_menu() {
             counter=$((counter + 1))
         fi
     done
-    echo -e "---------------------------------------------------------------------\n"
 }
 
 handle_input() {
