@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# TODO: Bæta við script sem lætur þig slá inn leitarstreng og opnar svo apkpure.com eða hvað síðan heitir með leitarstrengnum
+
 # ANSI color codes
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'

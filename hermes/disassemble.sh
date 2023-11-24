@@ -18,5 +18,6 @@ if [ -z $(file $path | grep Hermes) ]; then
 fi
 
 echo "Disassembling HBC bundle $path..."
-hbc-disassembler $path $path.hasm
-echo -e "File saved to $path.hasm\n"
+mkdir -p hermes
+hbc-disassembler $path hermes/$APK_NAME.hasm
+echo -e "File saved to hermes/$APK_NAME.hasm\n"

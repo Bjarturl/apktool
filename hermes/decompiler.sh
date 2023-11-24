@@ -18,5 +18,6 @@ if [ -z $(file $path | grep Hermes) ]; then
 fi
 
 echo "Decompiling HBC bundle $path..."
-hbc-decompiler $path $path.js
-echo -e "File saved to $path.js\n"
+mkdir -p hermes
+hbc-decompiler $path hermes/$APK_NAME.js
+echo -e "File saved to hermes/$APK_NAME.js\n"

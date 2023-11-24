@@ -18,5 +18,6 @@ if [ -z $(file $path | grep Hermes) ]; then
 fi
 
 echo "Parsing HBC bundle $path..."
-hbc-file-parser $path >$path.hbc
-echo -e "File saved to $path.hbc\n"
+mkdir -p hermes
+hbc-file-parser $path >hermes/$APK_NAME.hbc
+echo -e "File saved to hermes/$APK_NAME.hbc\n"
