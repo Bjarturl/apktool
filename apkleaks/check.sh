@@ -7,5 +7,5 @@ fi
 
 rm -rf apkleaks.txt
 echo "Checking $APK_FILE_NAME for any leaked sensitive info..."
-apkleaks -f $APK_FILE_NAME >apkleaks.txt
+apkleaks -f $APK_FILE_NAME | tee apkleaks.txt
 echo "Done! Check apkleaks.txt for results."

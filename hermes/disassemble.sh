@@ -7,12 +7,12 @@ fi
 
 path="$APK_NAME/assets/index.android.bundle"
 
-if [ ! -f $path ]; then
+if [ ! -f "$path" ]; then
     echo "The file $path does not exist, exiting..."
     exit 1
 fi
 
-if [ -z $(file $path | grep Hermes) ]; then
+if [ -z $(file "$path" | grep Hermes) ]; then
     echo "Hermes bytecode not detected in $path, exiting..."
     exit 1
 fi

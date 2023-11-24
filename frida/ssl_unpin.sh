@@ -5,6 +5,5 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
-frida --codeshare akabe1/frida-multiple-unpinning -U -f $APK_PACKAGE_NAME <<EOF &
-y
-EOF
+sleep 2
+frida --codeshare akabe1/frida-multiple-unpinning -U -f $APK_PACKAGE_NAME
