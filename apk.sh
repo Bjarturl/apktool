@@ -31,7 +31,7 @@ init() {
         done
 
         if [ -z "$apk_file_name" ]; then
-            read -p "No APK file found in the current directory. Do you want to download one from apkleaks.com? (y/n): " download_apk
+            read -p "No APK file found in the current directory. Do you want to download one from apkpure.com? (y/n): " download_apk
             if [[ "$(echo "$download_apk" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
                 read -p "Enter the name of the APK you want to download: " apk_name_to_download
                 apkpure_url="https://apkpure.com/search?q=$apk_name_to_download"
@@ -59,6 +59,226 @@ init() {
     done
 }
 
+leak_check() {
+    rm -rf apkleaks.txt
+    echo "Checking $APK_FILE_NAME for any leaked sensitive info..."
+    apkleaks -f $APK_FILE_NAME | tee apkleaks.txt
+    echo "Done! Check apkleaks.txt for results."
+}
+
+sign() {
+    # Generate the keystore
+    keytool -genkey -v -keystore $APK_NAME.keystore -alias $APK_NAME -keyalg RSA -keysize 2048 -validity 10000 -storepass 123123 -keypass 123123 -dname "cn=Unknown, ou=Unknown, o=Unknown, c=Unknown"
+
+    # Sign the APK
+    apksigner sign --ks $APK_NAME.keystore --ks-key-alias $APK_NAME --ks-pass pass:123123 --key-pass pass:123123 $APK_NAME/dist/$APK_FILE_NAME
+}
+
+verify() {
+    apksigner verify $APK_NAME/dist/$APK_FILE_NAME
+}
+
+apktool_assemble() {
+    apktool b $APK_NAME
+}
+
+jadx() {
+    echo -e "Initializing JADX conversion process..."
+    APK_NAME=kringlan
+    for dir in "$APK_NAME"/smali*; do
+        if [ -d "$dir" ] && [[ "$dir" != *.cache ]]; then
+            mkdir -p jadx
+            dir_name=$(basename "$dir")
+            output_directory="jadx/$dir_name"
+            mkdir -p "$output_directory"
+            echo -e "Converting $APK_NAME/$dir_name directory to Java..."
+            jadx -d "$output_directory" "$dir"
+        fi
+    done
+}
+
+java_handler() {
+    sh $HOME/netsec/android/tools/dex2jar/d2j-dex2jar.sh -f $APK_FILE_NAME -o $APK_NAME.jar
+    echo "${GREEN}Please select: File > Save All Sources in JD-GUI. Then close the program${NC}"
+    java -jar $HOME/netsec/android/tools/jd-gui-1.6.6.jar $APK_NAME.jar
+    unzip $APK_NAME.jar.src.zip -d $APK_NAME-java
+}
+
+hermes_file_parser() {
+    path="$APK_NAME/assets/index.android.bundle"
+
+    if [ ! -f "$path" ]; then
+        echo "The file $path does not exist"
+        return
+    fi
+
+    if [ -z $(file "$path" | grep Hermes) ]; then
+        echo "Hermes bytecode not detected in $path"
+        return
+    fi
+
+    echo "Parsing HBC bundle $path..."
+    mkdir -p hermes
+    hbc-file-parser $path >hermes/$APK_NAME.hbc
+    echo -e "File saved to hermes/$APK_NAME.hbc\n"
+}
+
+hermes_disassembler() {
+    path="$APK_NAME/assets/index.android.bundle"
+
+    if [ ! -f "$path" ]; then
+        echo "The file $path does not exist"
+        return
+    fi
+
+    if [ -z $(file "$path" | grep Hermes) ]; then
+        echo "Hermes bytecode not detected in $path"
+        return
+    fi
+
+    echo "Disassembling HBC bundle $path..."
+    mkdir -p hermes
+    hbc-disassembler $path hermes/$APK_NAME.hasm
+    echo -e "File saved to hermes/$APK_NAME.hasm\n"
+}
+
+hermes_decompiler() {
+    path="$APK_NAME/assets/index.android.bundle"
+
+    if [ ! -f "$path" ]; then
+        echo "The file $path does not exist"
+        return
+    fi
+
+    if [ -z $(file "$path" | grep Hermes) ]; then
+        echo "Hermes bytecode not detected in $path"
+        return
+    fi
+
+    echo "Decompiling HBC bundle $path..."
+    mkdir -p hermes
+    hbc-decompiler $path hermes/$APK_NAME.js
+    echo -e "File saved to hermes/$APK_NAME.js\n"
+}
+
+unzip_apk() {
+    echo -e "Unzipping $APK_FILE_NAME...\n"
+
+    rm -rf $APK_NAME
+    mkdir $APK_NAME
+    unzip $APK_FILE_NAME -d $APK_NAME
+}
+
+uninstall() {
+    echo -e "Uninstalling $APK_PACKAGE_NAME...\n"
+
+    echo "Uninstalling $APK_PACKAGE_NAME with adb..."
+    adb uninstall $APK_PACKAGE_NAME
+}
+
+stop() {
+
+    echo "Stopping $APK_NAME..."
+    adb shell am force-stop $APK_PACKAGE_NAME
+}
+
+start() {
+    echo "Launching $APK_NAME..."
+    adb shell am start -n $APK_PACKAGE_NAME/.MainActivity
+}
+
+install() {
+
+    echo -e "Installing $APK_FILE_NAME...\n"
+
+    echo "Installing $APK_FILE_NAME with adb..."
+    adb install $APK_FILE_NAME
+}
+
+install_new() {
+    echo "here: $APK_NAME"
+    adb install $APK_NAME/dist/$APK_FILE_NAME
+}
+
+emulator() {
+    emulator="Pixel_6_Pro_API_33"
+
+    if pgrep -f "$emulator" >/dev/null; then
+        echo -e "$emulator is already running.\n"
+        return
+    fi
+
+    echo -e "Launching $emulator...\n"
+    osascript -e 'tell app "Terminal" to do script "'$HOME'/Library/Android/sdk/emulator/emulator -avd '$emulator'"'
+    sleep 8
+
+    echo -e "Emulator is now running.\n"
+}
+
+clean() {
+    echo -e "Cleaning $(pwd)...\n"
+    find . -mindepth 1 -not \( -name "$APK_FILE_NAME" -o -path "$(pwd)/$APK_FILE_NAME" \) -exec rm -rf {} +
+}
+
+ssl_unpin() {
+    sleep 3
+    frida --codeshare akabe1/frida-multiple-unpinning -U -f $APK_PACKAGE_NAME
+}
+
+frida_run() {
+    adb root
+    adb shell getprop ro.product.cpu.abi
+    adb push /Users/bjartur/netsec/android/tools/frida-server-16.1.7-android-x86_64 /data/local/tmp/
+    adb shell "chmod 777 /data/local/tmp/frida-server-16.1.7-android-x86_64"
+    clear
+    old=$(adb shell ps | grep frida-server-16.1.7-android-x86_64 | awk '{print $2}' | xargs)
+    if [[ $old ]]; then
+        echo "Terminating running Frida process with PID $old."
+        adb shell kill -9 $old
+    fi
+
+    echo "Starting Frida..."
+    osascript -e 'tell app "Terminal" to do script "adb shell \"/data/local/tmp/frida-server-16.1.7-android-x86_64 &\""'
+    echo "Frida is now running in another terminal."
+}
+
+create_frida_script() {
+    echo "Dumping available classes to frida_class_dump.txt..."
+    timeout 10s frida -U -f com.hacker101.webdev -e "Java.perform(function () { Java.enumerateLoadedClasses({ 'onMatch': function (className) { console.log(className) }, 'onComplete': function () { } }) })" >output.txt
+    echo "frida -U -f com.hacker101.webdev -l $(pwd)/frida_script.js" | pbcopy
+    cat <<EOF >frida_script.js
+Java.perform(function () {
+    /*
+    You can run this script with:
+    frida -U -f $APK_PACKAGE_NAME -l frida_script.js
+    in a new terminal with Frida running.
+    Cheat sheet: https://appsec-labs.com/portal/frida-cheatsheet-for-android/
+    Examples: https://github.com/iddoeldor/frida-snippets#binder-transactions
+    */
+    var MainActivity = Java.use("$APK_PACKAGE_NAME.MainActivity");
+
+    // This can be any method you want
+    MainActivity.onCreate.implementation = function (view) {
+        // Log the method call
+        console.log('onCreate called with view: ' + view);
+
+        // Call the original onCreate method
+        this.onCreate(view);
+
+        // Perform any additional actions here
+    };
+});
+EOF
+    code frida_script.js
+}
+
+apktool_disassemble() {
+    echo -e "Disassembling $APK_FILE_NAME...\n"
+    rm -rf $APK_NAME
+    echo "Disassembling $APK_FILE_NAME with apktool..."
+    apktool d $APK_FILE_NAME
+}
+
 main() {
     clear
     echo -e "${GREEN}---------------------------------------------------------------------"
@@ -68,53 +288,65 @@ main() {
     echo -e "---------------------------------------------------------------------${NC}"
     init
     read -p "Press enter to initialize the environment..."
-    $ANDROID_SCRIPTS_HOME/general/clean.sh
-    $ANDROID_SCRIPTS_HOME/general/stop.sh
-    $ANDROID_SCRIPTS_HOME/general/emulator.sh
-
-    $ANDROID_SCRIPTS_HOME/general/install.sh
-    $ANDROID_SCRIPTS_HOME/general/unzip.sh
+    clean
+    stop
+    emulator
+    install
+    unzip_apk
 
     read -p "Do you want to perform a leak scan? (y/n): " leak_scan
     if [[ "$(echo "$leak_scan" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-        $ANDROID_SCRIPTS_HOME/apkleaks/check.sh
+        leak_check
     fi
 
-    $ANDROID_SCRIPTS_HOME/frida/run.sh
+    frida_run
     echo -e "${BLUE}Performing SSL unpinning with Frida. Feel free to explore the app with Burp Suite or other tools."
     echo -e "To look around with Burp suite set the Wifi proxy in the emulator to 10.0.2.2:<port> and install the Burp Suite certificate."
+    echo -e "You might need to turn off the Wifi, with no proxy enabled, then turn it back on until you have an active connection."
+    echo -e "When you have a connection then you can configure the proxy."
     echo -e "When you are done looking around the app and want to continue, press enter, then Q, then enter again.${NC}"
-    read -p "Press enter to start SSL unpinning."
-    $ANDROID_SCRIPTS_HOME/frida/ssl_unpin.sh
+    read -p "Do you want to start SSL unpinning? (y/n): " ssl_unpinning
+    if [[ "$(echo "$ssl_unpinning" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+        ssl_unpin
+    fi
 
     read -p "Press enter when you are ready to disassemble $APK_FILE_NAME..."
 
     if [[ -f "$APK_NAME/assets/index.android.bundle" ]]; then
+        echo -e "Native app detected. Running the appropriate decompilers..."
         rm -r $APK_NAME
-        $ANDROID_SCRIPTS_HOME/apktool/disassemble.sh
-        $ANDROID_SCRIPTS_HOME/hermes/decompiler.sh
-        $ANDROID_SCRIPTS_HOME/hermes/disassemble.sh
-        $ANDROID_SCRIPTS_HOME/hermes/file_parser.sh
+        apktool_disassemble
+        jadx
+        hermes_decompiler
+        hermes_disassemble
+        hermes_file_parser
     else
-        $ANDROID_SCRIPTS_HOME/javautils/dex2jar.sh
+        java_handler
         echo "You can now check out your decompiled Java classes."
+        read -p "Do you want to start SSL unpinning? (y/n): " ssl_unpinning
+        create_frida_script
+        if [[ "$(echo "$ssl_unpinning" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+            ssl_unpin
+        fi
+        echo "${RED}Goodbye!${NC}"
         exit 0
     fi
+
     echo -e "${YELLOW}You can now inspect the smali files in the $APK_NAME/smali* directories and make changes to them."
-    echo -e "You can also take a look in the hermes folder to better understand the source code.${NC}"
+    echo -e "You can also take a look in the hermes or jadx folders to get a better understanding of the source code.${NC}"
 
     read -p "Press enter to start SSL unpinning again to take a look around again."
-    $ANDROID_SCRIPTS_HOME/general/stop.sh
-    $ANDROID_SCRIPTS_HOME/frida/ssl_unpin.sh
+    stop
+    ssl_unpin
 
     read -p "Press enter when you are ready to recompile $APK_FILE_NAME... (make sure you have made your changes to the smali files)"
-    $ANDROID_SCRIPTS_HOME/apktool/assemble.sh
-    $ANDROID_SCRIPTS_HOME/apksigner/sign.sh
-    $ANDROID_SCRIPTS_HOME/apksigner/verify.sh
-    $ANDROID_SCRIPTS_HOME/general/stop.sh
-    $ANDROID_SCRIPTS_HOME/general/uninstall.sh
-    $ANDROID_SCRIPTS_HOME/general/install_new.sh
-    $ANDROID_SCRIPTS_HOME/frida/ssl_unpin.sh
+    apktool_assemble
+    sign
+    verify
+    stop
+    uninstall
+    install_new
+    ssl_unpin
 
     echo "Your configured app has now been started up in the emulator."
     echo "${GREEN}Goodbye${NC}"
